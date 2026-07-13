@@ -269,6 +269,8 @@ async def analyze_customer_endpoint(customer_id: str, current_user: dict = Depen
     result = analyze_customer(customer)
     return result
 
+from pydantic import BaseModel
+
 class ConfigUpdate(BaseModel):
     configs: dict
 
