@@ -10,19 +10,19 @@ def analyze_customer(customer: CustomerData) -> AIExplanationResponse:
         return AIExplanationResponse(
             lead_score=customer.lead_score or 85,
             income_estimate=int(customer.estimated_income or 85000),
-            repayment_capacity="High",
+            repayment_capacity="High" if (customer.foir or 1.0) < 0.4 else "Moderate",
             loan_recommendation=customer.eligible_loans[0] if customer.eligible_loans else "Credit Card",
-            intent="High",
-            conversion_probability="36%",
-            risk_level="Low",
+            intent="High" if (customer.intent_score or 0) > 60 else "Moderate",
+            conversion_probability=f"{customer.predicted_conversion_rate or 36.0}%",
+            risk_level="Low" if (customer.foir or 1.0) < 0.5 else "High",
             key_reasons=[
-                "Stable salary inflows over the last six months",
-                "Low debt obligations",
-                "Increasing savings trend",
-                "Multiple interactions with loan products"
+                f"Accurate income assessment includes investments & deposits (FOIR: {int((customer.foir or 0)*100)}%)",
+                f"High digital engagement: {customer.website_time_spent} mins spent, {customer.loan_document_downloads} docs downloaded",
+                "Stable salary inflows and low existing obligations",
+                "Multiple interactions with targeted loan products"
             ],
             next_best_action="Call within 24 hours and offer Home Loan with pre-approved eligibility.",
-            summary="Customer has stable salary inflows over the last six months, low debt obligations, increasing savings trend, and multiple interactions with loan products. These indicators suggest both repayment capacity and active purchase intent."
+            summary=f"Customer demonstrates strong repayment capacity with a FOIR of {int((customer.foir or 0)*100)}% considering accurate income streams. Digital footprint (time spent: {customer.website_time_spent}m, downloads: {customer.loan_document_downloads}) indicates high active purchase intent."
         )
 
     genai.configure(api_key=api_key)
@@ -36,14 +36,14 @@ def analyze_customer(customer: CustomerData) -> AIExplanationResponse:
     Analyze the customer's financial profile and behavioural data.
     
     Your objectives are:
-    1. Estimate monthly income.
-    2. Assess repayment capacity.
-    3. Predict customer interest in taking a loan.
+    1. Assess accurate monthly income combining salary, investments, and deposits.
+    2. Quantify repayment capacity by analyzing Fixed Obligation to Income Ratio (FOIR).
+    3. Predict customer interest based on digital behavioral signals (website time, downloads).
     4. Recommend the best loan product.
     5. Calculate a lead quality score from 0-100.
-    6. Explain the reasoning.
-    7. Mention possible risks.
-    8. Suggest the next best action for the relationship manager.
+    6. Analyze the customer's sentiment from the recent interaction notes. Factor this into your advice.
+    7. Explain the reasoning clearly, mentioning specific data points like FOIR, time spent, and sentiment.
+    8. Suggest the next best action for the relationship manager. Tailor the tone of the action based on their sentiment (e.g., empathetic if frustrated, urgent if ready to proceed).
 
     Customer Data:
     {customer.model_dump_json()}
@@ -78,14 +78,14 @@ def analyze_customer(customer: CustomerData) -> AIExplanationResponse:
         return AIExplanationResponse(
             lead_score=customer.lead_score or 85,
             income_estimate=int(customer.estimated_income or 85000),
-            repayment_capacity="High",
+            repayment_capacity="High" if (customer.foir or 1.0) < 0.4 else "Moderate",
             loan_recommendation=customer.eligible_loans[0] if customer.eligible_loans else "Credit Card",
             intent="High",
-            conversion_probability="36%",
+            conversion_probability=f"{customer.predicted_conversion_rate or 36.0}%",
             risk_level="Low",
             key_reasons=[
-                "Stable salary inflows",
-                "Good credit bureau score"
+                f"Calculated FOIR: {int((customer.foir or 0)*100)}%",
+                f"Digital intent signals present ({customer.website_time_spent}m on site)"
             ],
             next_best_action="Relationship Manager should call within 24 hours.",
             summary=f"Error generating AI explanation. Proceed with standard procedures. Error: {str(e)}"

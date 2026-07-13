@@ -12,6 +12,27 @@ def generate_mock_csv(filepath: str = "mock_customers.csv") -> str:
     previous_loans = ["Home Loan", "Personal Loan", "Car Loan", "Credit Card", "None"]
     products = ["Home Loan", "Personal Loan", "Car Loan", "Credit Card", "None"]
     
+    positive_notes = [
+        "Customer asked about current interest rates for home loans, seemed very interested.",
+        "Positive conversation about pre-approved limit. Requested a callback tomorrow.",
+        "Expressed interest in upgrading credit card to a premium tier.",
+        "Inquired about prepayment charges. Seems ready to proceed with the application."
+    ]
+    
+    negative_notes = [
+        "Customer was frustrated with the long hold time on the customer service line.",
+        "Complained about hidden charges in the recent statement. Very upset.",
+        "Not interested in any loans. Asked not to call again.",
+        "Had a bad experience with the app crashing during payment."
+    ]
+    
+    neutral_notes = [
+        "General inquiry about branch timings.",
+        "Customer updated their mailing address.",
+        "Requested a copy of the last 6 months statement.",
+        "No recent interaction recorded."
+    ]
+    
     data = []
     for i in range(1, 51):
         is_high_intent = random.random() > 0.7
@@ -39,7 +60,18 @@ def generate_mock_csv(filepath: str = "mock_customers.csv") -> str:
             "previous_loan": random.choice(previous_loans),
             "app_visits": random.randint(5, 30) if is_high_intent else random.randint(0, 5),
             "loan_calculator_usage": random.randint(1, 5) if is_high_intent else 0,
-            "product_viewed": "Home Loan" if is_high_intent else random.choice(products)
+            "product_viewed": "Home Loan" if is_high_intent else random.choice(products),
+            # New Transactional fields
+            "investment_income": random.randint(5000, 30000) if is_good_profile else random.randint(0, 2000),
+            "recurring_deposits": random.randint(2000, 15000) if is_good_profile else 0,
+            "utility_bill_payments": random.randint(2000, 8000),
+            "fixed_emi_obligations": random.randint(1000, 15000) if not is_good_profile else random.randint(5000, 40000),
+            # New Behavioral fields
+            "website_time_spent": random.randint(15, 120) if is_high_intent else random.randint(0, 10),
+            "loan_document_downloads": random.randint(1, 4) if is_high_intent else 0,
+            
+            # New Unstructured fields
+            "recent_interaction_notes": random.choice(positive_notes) if is_high_intent else (random.choice(negative_notes) if not is_good_profile else random.choice(neutral_notes))
         }
         data.append(customer)
         

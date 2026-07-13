@@ -4,3 +4,7 @@ pandas
 python-multipart
 google-generativeai
 pydantic
+pyjwt
+passlib
+bcrypt==3.2.2
+apscheduler

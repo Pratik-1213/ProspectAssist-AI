@@ -20,11 +20,27 @@ class CustomerData(BaseModel):
     loan_calculator_usage: int
     product_viewed: str
     
+    # New Transactional fields
+    investment_income: float
+    recurring_deposits: float
+    utility_bill_payments: float
+    fixed_emi_obligations: float
+    
+    # New Behavioral fields
+    website_time_spent: int # in minutes
+    loan_document_downloads: int
+    
+    # New Unstructured fields
+    recent_interaction_notes: Optional[str] = None
+    
     # Computed fields
     lead_score: Optional[int] = None
     estimated_income: Optional[float] = None
     intent_score: Optional[int] = None
     eligible_loans: Optional[List[str]] = None
+    foir: Optional[float] = None
+    predicted_conversion_rate: Optional[float] = None
+    sentiment_score: Optional[int] = None
 
 class AIExplanationResponse(BaseModel):
     lead_score: int
@@ -37,3 +53,15 @@ class AIExplanationResponse(BaseModel):
     key_reasons: List[str]
     next_best_action: str
     summary: str
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str

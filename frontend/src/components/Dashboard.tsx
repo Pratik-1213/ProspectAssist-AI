@@ -9,9 +9,10 @@ import {
   TrendingUp, 
   IndianRupee,
   Activity,
-  CheckCircle2,
-  AlertCircle
+  LogOut,
+  Download
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { 
   BarChart, 
@@ -33,24 +34,111 @@ const COLORS = ['#6366f1', '#8b5cf6', '#d946ef', '#f43f5e'];
 const PIE_COLORS = ['#3f3f46', '#818cf8', '#6366f1', '#4338ca'];
 
 export default function Dashboard() {
-  const [isUploading, setIsUploading] = useState(false);
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [data, setData] = useState<any>(null);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [userRole, setUserRole] = useState('loan_officer');
+  
+  // Pagination
+  const [page, setPage] = useState(0);
+  const itemsPerPage = 10;
+  
+  const router = useRouter();
+
+  const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    router.push('/login');
+  };
 
   const fetchDashboardData = async () => {
     try {
-      const res = await axios.get(`${API_URL}/dashboard`);
-      setDashboardData(res.data);
-    } catch (error) {
+      setLoading(true);
+      const res = await axios.get(`${API_URL}/dashboard`, {
+        headers: getAuthHeaders()
+      });
+      setData(res.data);
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        handleLogout();
+      }
       console.error("Error fetching dashboard data", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCustomers = async (skip=0, limit=500) => {
+    try {
+      const res = await axios.get(`${API_URL}/customers?skip=${skip}&limit=${limit}`, {
+        headers: getAuthHeaders()
+      });
+      setCustomers(res.data);
+    } catch (e) {
+      console.error("Error fetching customers", e);
     }
   };
 
   useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+    
+    // Parse role
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.role) setUserRole(payload.role);
+    } catch (e) {}
+    
     fetchDashboardData();
+    fetchCustomers();
   }, []);
+
+  const handleDownloadMockData = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/download-mock-csv`, {
+        headers: getAuthHeaders(),
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'mock_customers.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Error downloading mock data", error);
+    }
+  };
+  
+  const handleExportCSV = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/export-customers`, {
+        headers: getAuthHeaders(),
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'exported_customers.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Error exporting data", error);
+    }
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -58,19 +146,37 @@ export default function Dashboard() {
 
     const formData = new FormData();
     formData.append('file', file);
+    
+    const clientId = Math.random().toString(36).substring(7);
+    const ws = new WebSocket(`ws://localhost:8000/api/ws/${clientId}`);
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'progress') {
+        setUploadProgress(data.percent);
+      } else if (data.type === 'complete') {
+        setIsUploading(false);
+        setUploadProgress(0);
+        ws.close();
+        fetchDashboardData();
+        fetchCustomers();
+      }
+    };
 
     setIsUploading(true);
+    setUploadProgress(0);
     try {
-      const res = await axios.post(`${API_URL}/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      await axios.post(`${API_URL}/upload?client_id=${clientId}`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          ...getAuthHeaders()
+        }
       });
-      setCustomers(res.data);
-      fetchDashboardData();
     } catch (error) {
       console.error("Error uploading file", error);
       alert("Error uploading file. Please ensure it's a valid CSV.");
-    } finally {
       setIsUploading(false);
+      ws.close();
     }
   };
 
@@ -80,6 +186,17 @@ export default function Dashboard() {
     if (score >= 40) return 'text-amber-400 bg-amber-400/10 border-amber-400/20';
     return 'text-zinc-400 bg-zinc-400/10 border-zinc-400/20';
   };
+  
+  const maskPII = (text: string) => {
+    if (!text) return '';
+    if (userRole === 'admin') return text;
+    if (text.length > 4) {
+      return '*'.repeat(text.length - 4) + text.slice(-4);
+    }
+    return '***';
+  };
+
+  const displayedCustomers = customers.slice(page * itemsPerPage, (page + 1) * itemsPerPage);
 
   return (
     <div className="min-h-screen p-6 lg:p-8 animate-fade-in relative overflow-hidden">
@@ -95,32 +212,55 @@ export default function Dashboard() {
             </div>
             ProspectAssist <span className="text-brand-400 font-light">AI</span>
           </h1>
-          <p className="text-zinc-400 mt-2 ml-1">AI-Powered Lending Lead Intelligence Platform</p>
+          <p className="text-zinc-400 mt-2 ml-1">AI-Powered Lending Lead Intelligence Platform | {userRole === 'admin' ? 'Admin Mode' : 'Officer Mode'}</p>
         </div>
 
         <div className="flex gap-4">
-          <a 
-            href={`${API_URL}/download-mock-csv`}
+          <button 
+            onClick={handleDownloadMockData}
             className="px-4 py-2 rounded-lg font-medium text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
-            download
           >
-            Download Mock Data
-          </a>
+            Download Mock CSV
+          </button>
+          
+          <button 
+            onClick={handleExportCSV}
+            className="px-4 py-2 rounded-lg font-medium text-sm border border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
+          >
+            <Download className="w-4 h-4 text-emerald-400" /> Export Data
+          </button>
+          
           <label className="cursor-pointer glass px-5 py-2.5 rounded-lg font-medium text-sm text-white hover:bg-brand-600/20 hover:border-brand-500/50 transition-all flex items-center gap-2 group">
             <UploadCloud className="w-4 h-4 group-hover:scale-110 transition-transform text-brand-400" />
-            {isUploading ? 'Analyzing...' : 'Upload CSV'}
+            {isUploading ? `Analyzing... ${uploadProgress}%` : 'Upload CSV'}
             <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
           </label>
+          
+          <button 
+            onClick={handleLogout}
+            className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-sm font-medium transition-colors border border-rose-500/20 flex items-center gap-2"
+          >
+            <LogOut className="w-4 h-4" /> Logout
+          </button>
         </div>
       </header>
+      
+      {isUploading && (
+        <div className="w-full h-1 bg-zinc-800 rounded-full mb-8 relative z-10 overflow-hidden">
+          <div 
+            className="h-full bg-brand-500 transition-all duration-300"
+            style={{ width: `${uploadProgress}%` }}
+          />
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10 relative z-10">
-        <KPICard title="Total Customers" value={dashboardData?.total_customers || 0} icon={Users} color="text-zinc-400" />
-        <KPICard title="Qualified Leads" value={dashboardData?.qualified_leads || 0} icon={Target} color="text-indigo-400" />
-        <KPICard title="Hot Leads" value={dashboardData?.hot_leads || 0} icon={Flame} color="text-rose-400" />
-        <KPICard title="Expected Conversion" value={`${dashboardData?.expected_conversion || 0}%`} icon={TrendingUp} color="text-emerald-400" />
-        <KPICard title="Avg. Income" value={`₹${((dashboardData?.average_income || 0)/1000).toFixed(1)}k`} icon={IndianRupee} color="text-amber-400" />
+        <KPICard title="Total Customers" value={data?.total_customers || 0} icon={Users} color="text-zinc-400" />
+        <KPICard title="Qualified Leads" value={data?.qualified_leads || 0} icon={Target} color="text-indigo-400" />
+        <KPICard title="Hot Leads" value={data?.hot_leads || 0} icon={Flame} color="text-rose-400" />
+        <KPICard title="Expected Conversion" value={`${data?.expected_conversion || 0}%`} icon={TrendingUp} color="text-emerald-400" />
+        <KPICard title="Avg. Income" value={`₹${((data?.average_income || 0)/1000).toFixed(1)}k`} icon={IndianRupee} color="text-amber-400" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10 relative z-10">
@@ -132,7 +272,7 @@ export default function Dashboard() {
           </h3>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dashboardData?.lead_distribution || []}>
+              <BarChart data={data?.lead_distribution || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis dataKey="name" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
@@ -142,7 +282,7 @@ export default function Dashboard() {
                 />
                 <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]}>
                   {
-                    (dashboardData?.lead_distribution || []).map((entry: any, index: number) => (
+                    (data?.lead_distribution || []).map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))
                   }
@@ -161,7 +301,7 @@ export default function Dashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={dashboardData?.income_distribution || []}
+                  data={data?.income_distribution || []}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -171,7 +311,7 @@ export default function Dashboard() {
                   stroke="none"
                 >
                   {
-                    (dashboardData?.income_distribution || []).map((entry: any, index: number) => (
+                    (data?.income_distribution || []).map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                     ))
                   }
@@ -184,7 +324,7 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
           <div className="flex flex-wrap justify-center gap-3 mt-2">
-            {(dashboardData?.income_distribution || []).map((entry: any, index: number) => (
+            {(data?.income_distribution || []).map((entry: any, index: number) => (
               <div key={index} className="flex items-center gap-1.5 text-xs text-zinc-400">
                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
                 {entry.name}
@@ -199,22 +339,42 @@ export default function Dashboard() {
         <div className="glass rounded-2xl overflow-hidden relative z-10 animate-slide-up" style={{ animationDelay: '0.3s' }}>
           <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
             <h3 className="text-lg font-semibold">Analyzed Prospects</h3>
-            <span className="text-sm text-zinc-400">Showing {customers.length} results</span>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-zinc-400">Total {customers.length} results</span>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setPage(Math.max(0, page - 1))}
+                  disabled={page === 0}
+                  className="px-3 py-1 bg-zinc-800 text-sm rounded disabled:opacity-50"
+                >
+                  Prev
+                </button>
+                <span className="text-sm py-1">Page {page + 1}</span>
+                <button 
+                  onClick={() => setPage(page + 1)}
+                  disabled={(page + 1) * itemsPerPage >= customers.length}
+                  className="px-3 py-1 bg-zinc-800 text-sm rounded disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-zinc-400 uppercase bg-zinc-900/50 border-b border-zinc-800">
                 <tr>
-                  <th className="px-6 py-4 font-medium">Customer</th>
+                  <th className="px-6 py-4 font-medium">Customer (PII Masked)</th>
                   <th className="px-6 py-4 font-medium">Est. Income</th>
                   <th className="px-6 py-4 font-medium">Eligibility</th>
                   <th className="px-6 py-4 font-medium">Intent</th>
+                  <th className="px-6 py-4 font-medium">Conversion</th>
                   <th className="px-6 py-4 font-medium">Lead Score</th>
                   <th className="px-6 py-4 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {customers.map((c, i) => (
+                {displayedCustomers.map((c, i) => (
                   <tr 
                     key={c.customer_id} 
                     className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors group cursor-pointer"
@@ -224,8 +384,8 @@ export default function Dashboard() {
                     }}
                   >
                     <td className="px-6 py-4">
-                      <div className="font-medium text-zinc-200">{c.customer_id}</div>
-                      <div className="text-xs text-zinc-500 mt-1">{c.occupation}, {c.location}</div>
+                      <div className="font-medium text-zinc-200">{maskPII(c.customer_id)}</div>
+                      <div className="text-xs text-zinc-500 mt-1">{c.occupation}, {maskPII(c.location)}</div>
                     </td>
                     <td className="px-6 py-4">
                       ₹{c.estimated_income?.toLocaleString()}
@@ -248,6 +408,11 @@ export default function Dashboard() {
                           />
                         </div>
                         <span className="text-xs text-zinc-400">{c.intent_score}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5 font-medium text-emerald-400">
+                        {c.predicted_conversion_rate || 30}%
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -284,6 +449,7 @@ export default function Dashboard() {
         isOpen={isPanelOpen} 
         onClose={() => setIsPanelOpen(false)} 
         customer={selectedCustomer} 
+        userRole={userRole}
       />
     </div>
   );
