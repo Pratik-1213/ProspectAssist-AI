@@ -28,7 +28,7 @@ import {
 } from 'recharts';
 import CustomerSidePanel from './CustomerSidePanel';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#d946ef', '#f43f5e'];
 const PIE_COLORS = ['#3f3f46', '#818cf8', '#6366f1', '#4338ca'];
@@ -148,7 +148,8 @@ export default function Dashboard() {
     formData.append('file', file);
     
     const clientId = Math.random().toString(36).substring(7);
-    const ws = new WebSocket(`ws://localhost:8000/api/ws/${clientId}`);
+    const WS_URL = API_URL.replace(/^http/, 'ws');
+    const ws = new WebSocket(`${WS_URL}/ws/${clientId}`);
     
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);

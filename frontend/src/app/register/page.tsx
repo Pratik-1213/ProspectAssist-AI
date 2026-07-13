@@ -19,7 +19,8 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:8000/api/auth/register", {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+      const response = await axios.post(`${API_URL}/auth/register`, {
         email,
         password
       });

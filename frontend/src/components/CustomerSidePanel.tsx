@@ -11,7 +11,7 @@ interface CustomerSidePanelProps {
   customer: any | null;
 }
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 export default function CustomerSidePanel({ isOpen, onClose, customer }: CustomerSidePanelProps) {
   const [loading, setLoading] = useState(false);

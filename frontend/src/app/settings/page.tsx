@@ -5,7 +5,7 @@ import { Settings, RefreshCw, CheckCircle2, AlertTriangle, ArrowLeft } from 'luc
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 export default function SettingsPage() {
   const router = useRouter();
